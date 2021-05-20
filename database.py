@@ -22,6 +22,29 @@ class Database():
             con.commit()
             log.info(f'Added new user({username})')
 
+    def add_user_interest(self, username, interest_id):
+        user_id = self.get_user_id(username)
+
+        user_interest = self.get_user_interests(username)
+        for _, id in user_interest:
+            if interest_id == id:
+                return False
+
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute(
+                'INSERT INTO user_interests (user_id, interest_id) VALUES (?, ?)', (str(user_id), str(interest_id)))
+            con.commit()
+            return True
+
+    def remove_all_interests(self, username):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute("""
+                DELETE FROM user_interests WHERE user_id=(
+                    SELECT id from users WHERE login=?)""", (username,))
+            con.commit()
+
     def get_user_interests(self, username):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
@@ -42,3 +65,19 @@ class Database():
             data = cur.fetchall()
             con.commit()
             return data
+
+    def get_all_interests(self):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute('SELECT * FROM interests')
+            data = cur.fetchall()
+            con.commit()
+            return data
+
+    def get_user_id(self, username):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute('SELECT id FROM users WHERE login=?', (username,))
+            data = cur.fetchall()
+            con.commit()
+            return data[0][0]
