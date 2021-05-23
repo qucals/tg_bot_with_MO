@@ -1,6 +1,5 @@
 import telebot
 import sqlite3
-import sqlite3
 import logging as log
 
 from os import device_encoding
@@ -11,18 +10,10 @@ from telebot.apihelper import send_message
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
 
 from database import Database
+from config import *
 
-# Constants
-
-token = '1720790674:AAFVmWMGe3p3a3O5xX63AAsrAie0WqYl_1Y'
-db_path = '/Users/totalboy/Desktop/Diploma/data.db'
-
-# Main handles
-
-log.basicConfig(filename='logfile.log',
-                format='[%(levelname)s] : %(asctime)s > %(message)s', level=log.INFO)
-bot = telebot.TeleBot(token, parse_mode='Markdown')
-db = Database(db_path)
+bot = telebot.TeleBot(TOKEN, parse_mode='Markdown')
+db = Database(DB_PATH)
 
 interests = db.get_all_interests()
 interests_dict = {name.lower(): id for id, name in interests}
@@ -33,43 +24,60 @@ interests_dict = {name.lower(): id for id, name in interests}
 @bot.message_handler(commands=['start'])
 def start_bot(message):
     log.info(f'Start chatting with user({message.from_user.username})')
-    send_welcome(message.chat.id, message.from_user.username)
+
+    keyboard = get_main_keyboard()
+    bot.send_message(message.chat.id, f'*Здравствуйте, {message.from_user.username}!* \n\nЯ смотрю, вы здесь первый раз.\nДавайте я вам все расскажу! \n\nЯ - бот, который помогает найти интересную информацию для вас на основе ваших предпочтений и интересов. \n\nДля начала мне нужно узнать ваши интересы. Нажимайте кнопочки под чатом, чтобы выбрать интересующую вас категорию. \nПосле выбора всех интересующих вас категорий нажмите кнопку "Закончить выбор", чтобы я начал вам выдавать интересную информацию. \n\nТакже перечисляю ниже свои команды: \n1. /info - Выдать интересную информацию \n2. /add - Добавить интересы\n3. /help - Помощь\n4. /reset - Перевыбрать интересы\n', reply_markup=keyboard)
 
     if not db.is_user_in_db(message.from_user.username):
         db.add_user(message.from_user.username)
 
 
 @bot.message_handler(commands=['help'])
-def send_help(message):
-    bot.send_message(message.from_user.id, 'Я - бот, который помогает найти интересную информацию для вас на основе ваших предпочтений и интересов.\nЯ обладаю следующими командами:\n1. /start - Начать диалог\n2. /help - Помощь по боту\n3. /info - Выдать интересную информацию\n4. /reset - Перевыбрать интересы\n')
+def get_help_bot(message):
+    bot.send_message(message.chat.id, 'Я - бот, который помогает найти интересную информацию для вас на основе ваших предпочтений и интересов.\nЯ обладаю следующими командами:\n1. /start - Начать диалог\n2. /help - Помощь по боту\n3. /info - Выдать интересную информацию\n4. /reset - Перевыбрать интересы\n')
 
 
 @bot.message_handler(commands=['reset'])
-def send_help(message):
-    bot.send_message(message.from_user.id, 'Я - бот, который помогает найти интересную информацию для вас на основе ваших предпочтений и интересов.\nЯ обладаю следующими командами:\n1. /start - Начать диалог\n2. /help - Помощь по боту\n3. /info - Выдать интересную информацию\n4. /reset - Перевыбрать интересы\n')
+def reset_interests_bot(message):
+    db.remove_all_interests(message.from_user.username)
+    bot.send_message(
+        message.chat.id, 'Ваши категории интересов успешно сброшены!')
 
 
 @bot.message_handler(commands=['add'])
-def send_help(message):
-    select_interests(message.from_user.username, message.chat.id)
+def add_interests_bot(message):
+    interests = db.get_no_user_interests(message.from_user.username)
+    if len(interests) > 0:
+        keyboard = get_keybord_with_interests(interests)
+        bot.send_message(
+            message.chat.id, 'Выберите соответствущие категории, которые вам подходят, нажимая на кнопки.', reply_markup=keyboard)
+    else:
+        send_all_interest_added(message.chat.id)
+
+
+@bot.message_handler(commands=['info'])
+def get_info_bot(message):
+    pass
 
 
 @bot.message_handler(content_types=['text'])
-def process_buttons(message):
+def process_buttons_bot(message):
     username = message.from_user.username
     chat_id = message.chat.id
     text = message.text.lower()
 
-    if text in 'помощь':
-        send_help(message)
-    elif text == 'узнать интересную информацию':
-        get_info(username, chat_id)
-    elif text == 'добавить интересы':
-        select_interests(username, chat_id)
-    elif text == 'сбросить интересы':
-        remove_interests(username, chat_id)
+    if text in ['/start', 'привет', 'кто ты?', 'кто ты', 'старт']:
+        start_bot(message)
+    elif text in ['/add', 'выбрать категории интересов', 'выбрать интересы', 'интересы']:
+        add_interests_bot(message)
+    elif text in ['/help', 'помощь', 'помоги мне', 'помоги', 'как с тобой работать', 'что мне делать']:
+        get_help_bot(message)
+    elif text in ['/info', 'узнать интересную информацию', 'интересная информация', 'интересные факты', 'информация', 'факты', 'получить факты']:
+        get_info_bot(message)
+    elif text in ['/reset', 'сбросить интересы']:
+        reset_interests_bot(message)
     elif text == 'назад':
-        send_main_message(chat_id)
+        send_main_message(message.chat.id)
     elif interests_dict.get(text) != None:
         is_added = db.add_user_interest(username, interests_dict.get(text))
         if is_added:
@@ -86,11 +94,6 @@ def send_main_message(chat_id):
     keyboard = get_main_keyboard()
     bot.send_message(
         chat_id, 'Выберите одну из функций с помощью кнопок.', reply_markup=keyboard)
-
-
-def send_welcome(chat_id, username):
-    keyboard = get_main_keyboard()
-    bot.send_message(chat_id, f'*Здравствуйте, {username}!*\n\nЯ смотрю, вы здесь первый раз.\nДавайте я вам все расскажу!\n\nЯ - бот, который помогает найти интересную информацию для вас на основе ваших предпочтений и интересов.\n\nДля начала мне нужно узнать ваши интересы. Нажимайте кнопочки под чатом, чтобы выбрать интересующую вас категорию.\nПосле выбора всех интересующих вас категорий нажмите кнопку "Закончить выбор", чтобы я начал вам выдавать интересную информацию.\n\nТакже перечисляю ниже свои команды: \n1. /info - Выдать интересную информацию \n2. /add - Добавить интересы\n3. /help - Помощь\n4. /reset - Перевыбрать интересы\n', reply_markup=keyboard)
 
 
 def send_no_added_interest_message(chat_id):
@@ -113,30 +116,10 @@ def send_error(message):
                      'Я не знаю такую команду!\nВоспользуйтесь командой /help для того, чтобы узнать мои команды.\n')
 
 
-def get_info(username, chat_id):
-    pass
-
-
-def remove_interests(username, chat_id):
-    db.remove_all_interests(username)
-    bot.send_message(chat_id, 'Ваши категории интересов успешно сброшены!')
-
-
-def select_interests(username, chat_id):
-    interests = db.get_no_user_interests(username)
-
-    if len(interests) > 0:
-        keyboard = get_keybord_with_interests(interests)
-        bot.send_message(
-            chat_id, 'Выберите соответствущие категории, которые вам подходят, нажимая на кнопки.', reply_markup=keyboard)
-    else:
-        send_all_interest_added(chat_id)
-
-
 def get_main_keyboard():
     keyboard = telebot.types.ReplyKeyboardMarkup(True)
     main_list = ['Узнать интересную информацию',
-                 'Добавить интересы', 'Помощь', 'Сбросить интересы']
+                 'Выбрать интересы', 'Помощь', 'Сбросить интересы']
     btns = [KeyboardButton(name) for name in main_list]
     keyboard.add(*btns)
     return keyboard
@@ -152,11 +135,6 @@ def get_keybord_with_interests(interests):
 
 def get_back_button():
     return KeyboardButton('Назад')
-
-
-@bot.message_handler(func=lambda message: True)
-def echo_all(message):
-    bot.reply_to(message, message.text)
 
 
 bot.polling()
