@@ -1,14 +1,18 @@
+# < Зависимости >
+
 import telebot
-import sqlite3
 import logging as log
 import math
+import random
 
 from telebot import types
-from telebot.apihelper import send_message
+from telebot.apihelper import send_message, unpin_all_chat_messages
 from telebot.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton
 
 from database import Database
 from config import *
+
+# < Константы >
 
 bot = telebot.TeleBot(TOKEN, parse_mode='Markdown')
 db = Database(DB_PATH)
@@ -32,7 +36,7 @@ reset_commands = ['/reset', 'сбросить интересы']
 admins_commands = ['Посмотреть список фактов', 'Посмотреть категории интересов', 'Показать описание факта',
                    'Добавить факт', 'Добавить тег', 'Удалить факт', 'Удалить тег', 'Добавить категории интересов у факта', 'Сбросить категории интересов у факта', 'Назад']
 
-# Bot's functions
+# < Callback - Функции бота >
 
 
 @bot.message_handler(commands=['start'])
@@ -92,24 +96,35 @@ def get_info_bot(message):
     log.info(f'Send some info to ({message.from_user.username})')
 
     info = get_list_info(message.from_user.username)
-    doc_id = info[0][0]
+    no_shown = [i for i in info if i[2]]
+
+    if len(no_shown):
+        doc_id = no_shown[0][0]
+    else:
+        doc_id = info[random.randint(0, len(info) - 1)][0]
 
     doc = db.get_doc(doc_id)
 
     markup = InlineKeyboardMarkup()
     markup.row_width = 5
 
-    btn = []
-    for i in range(1, 6, 1):
-        btn.append(InlineKeyboardButton(
-            f'{i}', callback_data=f'{doc_id};{i}'))
-    markup.add(*btn)
+    is_already_estimated = db.is_already_estimated(
+        message.from_user.username, doc_id)
+
+    if not is_already_estimated:
+        btn = []
+        for i in range(1, 6, 1):
+            btn.append(InlineKeyboardButton(
+                f'{i}', callback_data=f'{doc_id};{i}'))
+        markup.add(*btn)
 
     bot.send_message(
         message.chat.id, f'{doc[0]}\n\n{doc[1]}', reply_markup=markup)
-    bot.send_message(
-        message.chat.id, 'Пожалуйста, оцените предоставленную информацию. \nЭто поможет мне лучше подбирать для Вас интересную информацию!')
 
+    if is_already_estimated:
+        bot.send_message(
+            message.chat.id, 'Пожалуйста, оцените предоставленную информацию. \nЭто поможет мне лучше подбирать для Вас интересную информацию!')
+        db.set_shown_info(message.from_user.username, doc_id)
 
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -125,10 +140,10 @@ def handle_query_bot(call):
         call.from_user.id, 'Спасибо за поставленный рейтинг! \nБлагодаря этому Вы сделали меня лучше! 😉')
 
 
-# Additional functions for bot
+# < Дополнительные функции для упрощения работы с ботом >
 
 
-def show_tegs(message):
+def show_tegs_admin(message):
     tegs = db.get_all_interests()
     msg = 'Список категорий интересов (индентификаторы и названия): \n\n'
     for teg in tegs:
@@ -136,27 +151,32 @@ def show_tegs(message):
     bot.send_message(message.chat.id, msg)
 
 
-def show_docs(message):
+def show_docs_admin(message):
     docs = db.get_all_docs()
     msg = 'Список фактов (индентификаторы, названия и теги): \n\n'
     for doc in docs:
         tegs = ', '.join(doc[2])
-        msg += '{index}. {name} ({tegs})\n'.format(
-            index=doc[0], name=doc[1], tegs=tegs)
+        msg += '{index}. {name} '.format(index=doc[0], name=doc[1])
+        if len(tegs) > 0:
+            msg += '({tegs}) \n'.format(tegs=tegs)
+        else:
+            msg += '\n'
     msg += '\nЕсли выхотите посмотреть описание факта, напишите следующую команду: /get\_teg \*id\*. \nНапример, так: /get\_teg 3\n'
     bot.send_message(message.chat.id, msg)
 
-def show_desc_of_doc(message):
+
+def show_desc_of_doc_admin(message):
     pass
+
 
 def add_doc_admin(message):
     bot.send_message(message.chat.id, 'Давайте добавим новый факт! \nОбратите внимание, если название совпадет с названием уже существующего факта, то таким образом вы лишь обновите информацию о нем \nЕсли вы передумали добавлять факт, напишите команду /break')
     bot.send_message(
         message.chat.id, 'Введите название факта, а затем с новой строки его описание.')
-    bot.register_next_step_handler_by_chat_id(message.chat.id, c_add_doc)
+    bot.register_next_step_handler_by_chat_id(message.chat.id, c_add_doc_admin)
 
 
-def c_add_doc(message):
+def c_add_doc_admin(message):
     if (message.text != '/break'):
         try:
             name, desc = message.text.split('\n', maxsplit=1)
@@ -170,7 +190,7 @@ def c_add_doc(message):
 
 def add_interest_user(message):
     is_added = db.add_user_interest(
-        message.from_user.username, interests_dict.get(message.text))
+        message.from_user.username, interests_dict.get(message.text.lower()))
     if is_added:
         send_added_interest_message(
             message.from_user.username, message.chat.id, message.text)
@@ -183,10 +203,11 @@ def add_interest_admin(message):
         message.chat.id, 'Давайте добавим новую категорию интересов! \nЕсли вы передумали добавлять факт, напишите команду /break')
     bot.send_message(
         message.chat.id, 'Введите название категории интересов.')
-    bot.register_next_step_handler_by_chat_id(message.chat.id, c_add_interest)
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_add_interest_admin)
 
 
-def c_add_interest(message):
+def c_add_interest_admin(message):
     if (message.text != '/break'):
         db.add_interest(message.text)
         bot.send_message(
@@ -194,17 +215,70 @@ def c_add_interest(message):
     else:
         bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
+
 def remove_doc_admin(message):
-    pass
+    bot.send_message(
+        message.chat.id, 'Введите уникальный идентификатор факта.')
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_remove_doc_admin)
+
+
+def c_remove_doc_admin(message):
+    if message.text.isdigit():
+        db.remove_doc(int(message.text))
+        bot.send_message(message.chat.id, 'Факт успешно удален!')
+    else:
+        bot.send_message(message.chat.id, 'Некорректный ввод данных!')
+
 
 def remove_interest_admin(message):
-    pass
+    bot.send_message(
+        message.chat.id, 'Введите уникальный идентификатор категории интереса.')
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_remove_interest_admin)
+
+
+def c_remove_interest_admin(message):
+    if message.text.isdigit():
+        db.remove_interest(int(message.text))
+        bot.send_message(
+            message.chat.id, 'Категория интереса успешно удалена!')
+    else:
+        bot.send_message(message.chat.id, 'Произошла ошибка!')
+
 
 def add_interests_to_doc_admin(message):
-    pass
+    bot.send_message(
+        message.chat.id, 'Введите через пробел идентификатор факта и идентификатор категории интереса, который хотите присвоить факту.')
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_add_interests_to_doc_admin)
+
+
+def c_add_interests_to_doc_admin(message):
+    try:
+        doc_id, interest_id = message.text.split(' ', 1)
+        db.add_interest_to_doc(doc_id, interest_id)
+        bot.send_message(
+            message.chat.id, 'Категория интереса у факта успешно удалена!')
+    except Exception as e:
+        bot.send_message(message.chat.id, 'Произошла ошибка!')
+
 
 def reset_interests_of_doc_admin(message):
-    pass
+    bot.send_message(
+        message.chat.id, 'Введите идентификатор факта, у которого Вы хотите сбросить категории интересов.')
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_reset_interests_of_doc_admin)
+
+
+def c_reset_interests_of_doc_admin(message):
+    if message.text.isdigit():
+        db.reset_interests_of_doc(int(message.text))
+        bot.send_message(
+            message.chat.id, 'Категория интереса у факта успешно удалена!')
+    else:
+        bot.send_message(message.chat.id, 'Произошла ошибка!')
+
 
 def send_main_message(message):
     keyboard = get_main_keyboard()
@@ -292,9 +366,11 @@ def get_list_info(username):
                     username, unappreciated_id)
 
                 if similarity_interests != 0:
-                    similarity += math.log10(similarity_interests)**2
+                    similarity += similarity_interests / \
+                        db.get_count_interests_of_doc(unappreciated_id)
 
-                result.append((unappreciated_id, similarity))
+                result.append((unappreciated_id, similarity,
+                              db.is_already_shown(username, unappreciated_id)))
     else:
         for unappreciated_id in unappreciated:
             similarity = 0
@@ -303,18 +379,22 @@ def get_list_info(username):
                 username, unappreciated_id)
 
             if similarity_interests != 0:
-                similarity += math.log(similarity_interests)**2
+                similarity += similarity_interests / \
+                    db.get_count_interests_of_doc(unappreciated_id)
 
-            result.append((unappreciated_id, similarity))
+            result.append((unappreciated_id, similarity,
+                          db.is_already_shown(username, unappreciated_id)))
 
     result.sort(key=lambda x: x[1], reverse=True)
     return result
 
+# < Массив: [команды], функция >
+
 
 admin_triggers = [
-    ('Посмотреть список фактов', show_docs),
-    ('Посмотреть категории интересов', show_tegs),
-    ('Посмотреть информацию о факте', show_desc_of_doc),
+    ('Посмотреть список фактов', show_docs_admin),
+    ('Посмотреть категории интересов', show_tegs_admin),
+    ('Посмотреть информацию о факте', show_desc_of_doc_admin),
     ('Добавить факт', add_doc_admin),
     ('Добавить тег', add_interest_admin),
     ('Удалить факт', remove_doc_admin),
@@ -324,12 +404,14 @@ admin_triggers = [
     ('Назад', send_main_message)
 ]
 
+
 @bot.message_handler(commands=['admin'])
 def admin_panel_bot(message):
     text = message.text.lower()
     for command, func in admin_triggers:
         if text == command.lower():
             func(message)
+
 
 triggers = [
     (start_commands, start_bot),
@@ -340,6 +422,7 @@ triggers = [
     ([command.lower() for command in admins_commands], admin_panel_bot),
     (['назад'], send_main_message),
 ]
+
 
 @bot.message_handler(content_types=['text'])
 def process_triggers_bot(message):
@@ -357,5 +440,6 @@ def process_triggers_bot(message):
         add_interest_user(message)
     else:
         send_error(message)
+
 
 bot.polling()

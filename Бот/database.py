@@ -170,6 +170,14 @@ class Database():
             result = [d[0] for d in data]
             return result
 
+    def get_count_interests_of_doc(self, doc_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute(
+                'SELECT COUNT(*) FROM tegs WHERE doc_id=?', (doc_id,))
+            data = cur.fetchall()
+            return data[0][0]
+
     def get_doc(self, doc_id):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
@@ -204,7 +212,8 @@ class Database():
             data = cur.fetchall()
 
             for idx, name in data:
-                cur.execute('SELECT name FROM interests WHERE id IN (SELECT interest_id FROM tegs WHERE doc_id=?)', (idx,))
+                cur.execute(
+                    'SELECT name FROM interests WHERE id IN (SELECT interest_id FROM tegs WHERE doc_id=?)', (idx,))
                 tegs = cur.fetchall()
                 _tegs = [t[0] for t in tegs]
                 result.append((idx, name, _tegs))
@@ -244,10 +253,36 @@ class Database():
                 'INSERT OR REPLACE INTO docs (name, description) VALUES (?, ?)', (name, desc,))
             con.commit()
 
+    def add_interest_to_doc(self, doc_id, interest_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute(
+                'INSERT INTO tegs (doc_id, interest_id) VALUES (?, ?)', (doc_id, interest_id,))
+            con.commit()
+
+    def reset_interests_of_doc(self, doc_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute(
+                'DELETE FROM tegs WHERE doc_id=?', (doc_id,))
+            con.commit()
+
     def add_interest(self, name):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
-            cur.execute('INSERT OR REPLACE INTO interests (name) VALUES (?)', (name,))
+            cur.execute(
+                'INSERT OR REPLACE INTO interests (name) VALUES (?)', (name,))
+            con.commit()
+
+    def set_shown_info(self, username, doc_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute("""
+                REPLACE INTO rating (doc_id, user_id, is_shown) VALUES 
+                (?,
+                (SELECT id FROM users u WHERE u.login=?),
+                1)
+                """, (doc_id, username,))
             con.commit()
 
     def set_rating_info(self, username, doc_id, rating):
@@ -259,6 +294,31 @@ class Database():
                     ?,
                     (SELECT id FROM users u WHERE u.login=?),
                     ?,
-                    0)
-                """, (str(doc_id), str(username), str(rating)))
+                    1)
+                """, (doc_id, username, rating))
             con.commit()
+
+    def is_already_estimated(self, username, doc_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute("""
+            SELECT COUNT(*) 
+            FROM rating 
+            WHERE doc_id=? AND user_id=(
+                SELECT id FROM users WHERE login=?
+            )""",
+                        (doc_id, username,))
+            data = cur.fetchall()
+            return data[0][0] != 0
+
+    def is_already_shown(self, username, doc_id):
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute("""
+            SELECT COUNT(*)
+            FROM rating 
+            WHERE doc_id=? AND user_id=(
+                SELECT id FROM users WHERE login=?
+            )""", (doc_id, username))
+            data = cur.fetchall()
+            return data[0][0] != 0
