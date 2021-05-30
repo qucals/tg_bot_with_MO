@@ -1,4 +1,5 @@
 import logging as log
+from os import name
 import sqlite3
 
 
@@ -194,6 +195,22 @@ class Database():
             data = cur.fetchall()
             return data[0][0]
 
+    def get_all_docs(self):
+        result = []
+
+        with sqlite3.connect(self.db_path) as con:
+            cur = con.cursor()
+            cur.execute('SELECT id, name FROM docs')
+            data = cur.fetchall()
+
+            for idx, name in data:
+                cur.execute('SELECT name FROM interests WHERE id IN (SELECT interest_id FROM tegs WHERE doc_id=?)', (idx,))
+                tegs = cur.fetchall()
+                _tegs = [t[0] for t in tegs]
+                result.append((idx, name, _tegs))
+
+        return result
+
     def get_doc_for_admin(self, doc_id):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
@@ -224,13 +241,13 @@ class Database():
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
             cur.execute(
-                'INSERT INTO docs (name, description) VALUES (?, ?)', (name, desc,))
+                'INSERT OR REPLACE INTO docs (name, description) VALUES (?, ?)', (name, desc,))
             con.commit()
 
     def add_interest(self, name):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
-            cur.execute('INSERT INTO interests (name) VALUES (?)', (name,))
+            cur.execute('INSERT OR REPLACE INTO interests (name) VALUES (?)', (name,))
             con.commit()
 
     def set_rating_info(self, username, doc_id, rating):
