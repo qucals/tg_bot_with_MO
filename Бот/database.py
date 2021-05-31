@@ -18,7 +18,7 @@ class Database():
     def is_admin(self, username):
         with sqlite3.connect(self.db_path) as con:
             cur = con.cursor()
-            cur.execute('SELECT COUNT(*) FROM admins WHERE login=?',
+            cur.execute('SELECT COUNT(*) FROM admins WHERE user_id=(SELECT id FROM users WHERE login=?)',
                         (username,))
             data = cur.fetchall()
             return data[0][0] != 0

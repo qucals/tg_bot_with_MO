@@ -166,11 +166,27 @@ def show_docs_admin(message):
 
 
 def show_desc_of_doc_admin(message):
-    pass
+    bot.send_message(
+        message.chat.id, 'Напишите идентификатор факта о городе, о котором хотите получить описание. \nДля отмены действия напишите команду /break')
+    bot.send_message(
+        message.chat.id, 'Введите название факта, а затем с новой строки его описание.')
+    bot.register_next_step_handler_by_chat_id(
+        message.chat.id, c_show_desc_of_doc_admin)
+
+
+def c_show_desc_of_doc_admin(message):
+    if (message.text != '/break'):
+        if message.text.isdigit():
+            desc = db.get_doc_for_admin(int(message.text))[1]
+            bot.send_message(message.chat.id, '{desc}'.format(desc=desc))
+        else:
+            bot.send_message(message.chat.id, 'Некорректный ввод данных!')
+    else:
+        bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
 
 def add_doc_admin(message):
-    bot.send_message(message.chat.id, 'Давайте добавим новый факт! \nОбратите внимание, если название совпадет с названием уже существующего факта, то таким образом вы лишь обновите информацию о нем \nЕсли вы передумали добавлять факт, напишите команду /break')
+    bot.send_message(message.chat.id, 'Давайте добавим новый факт! \nОбратите внимание, если название совпадет с названием уже существующего факта, то таким образом вы лишь обновите информацию о нем \nДля отмены действия напишите команду /break')
     bot.send_message(
         message.chat.id, 'Введите название факта, а затем с новой строки его описание.')
     bot.register_next_step_handler_by_chat_id(message.chat.id, c_add_doc_admin)
@@ -200,7 +216,7 @@ def add_interest_user(message):
 
 def add_interest_admin(message):
     bot.send_message(
-        message.chat.id, 'Давайте добавим новую категорию интересов! \nЕсли вы передумали добавлять факт, напишите команду /break')
+        message.chat.id, 'Давайте добавим новую категорию интересов! \nДля отмены действия напишите команду /break')
     bot.send_message(
         message.chat.id, 'Введите название категории интересов.')
     bot.register_next_step_handler_by_chat_id(
@@ -218,66 +234,78 @@ def c_add_interest_admin(message):
 
 def remove_doc_admin(message):
     bot.send_message(
-        message.chat.id, 'Введите уникальный идентификатор факта.')
+        message.chat.id, 'Введите уникальный идентификатор факта. \nДля отмены действия напишите команду /break')
     bot.register_next_step_handler_by_chat_id(
         message.chat.id, c_remove_doc_admin)
 
 
 def c_remove_doc_admin(message):
-    if message.text.isdigit():
-        db.remove_doc(int(message.text))
-        bot.send_message(message.chat.id, 'Факт успешно удален!')
+    if (message.text != '/break'):
+        if message.text.isdigit():
+            db.remove_doc(int(message.text))
+            bot.send_message(message.chat.id, 'Факт успешно удален!')
+        else:
+            bot.send_message(message.chat.id, 'Некорректный ввод данных!')
     else:
-        bot.send_message(message.chat.id, 'Некорректный ввод данных!')
+        bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
 
 def remove_interest_admin(message):
     bot.send_message(
-        message.chat.id, 'Введите уникальный идентификатор категории интереса.')
+        message.chat.id, 'Введите уникальный идентификатор категории интереса. \nДля отмены действия напишите команду /break')
     bot.register_next_step_handler_by_chat_id(
         message.chat.id, c_remove_interest_admin)
 
 
 def c_remove_interest_admin(message):
-    if message.text.isdigit():
-        db.remove_interest(int(message.text))
-        bot.send_message(
-            message.chat.id, 'Категория интереса успешно удалена!')
+    if (message.text != '/break'):
+        if message.text.isdigit():
+            db.remove_interest(int(message.text))
+            bot.send_message(
+                message.chat.id, 'Категория интереса успешно удалена!')
+        else:
+            bot.send_message(message.chat.id, 'Произошла ошибка!')
     else:
-        bot.send_message(message.chat.id, 'Произошла ошибка!')
+        bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
 
 def add_interests_to_doc_admin(message):
     bot.send_message(
-        message.chat.id, 'Введите через пробел идентификатор факта и идентификатор категории интереса, который хотите присвоить факту.')
+        message.chat.id, 'Введите через пробел идентификатор факта и идентификатор категории интереса, который хотите присвоить факту. \nДля отмены действия напишите команду /break')
     bot.register_next_step_handler_by_chat_id(
         message.chat.id, c_add_interests_to_doc_admin)
 
 
 def c_add_interests_to_doc_admin(message):
-    try:
-        doc_id, interest_id = message.text.split(' ', 1)
-        db.add_interest_to_doc(doc_id, interest_id)
-        bot.send_message(
-            message.chat.id, 'Категория интереса у факта успешно удалена!')
-    except Exception as e:
-        bot.send_message(message.chat.id, 'Произошла ошибка!')
+    if (message.text != '/break'):
+        try:
+            doc_id, interest_id = message.text.split(' ', 1)
+            db.add_interest_to_doc(doc_id, interest_id)
+            bot.send_message(
+                message.chat.id, 'Категория интереса у факта успешно удалена!')
+        except Exception as e:
+            bot.send_message(message.chat.id, 'Произошла ошибка!')
+    else:
+        bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
 
 def reset_interests_of_doc_admin(message):
     bot.send_message(
-        message.chat.id, 'Введите идентификатор факта, у которого Вы хотите сбросить категории интересов.')
+        message.chat.id, 'Введите идентификатор факта, у которого Вы хотите сбросить категории интересов. \nДля отмены действия напишите команду /break')
     bot.register_next_step_handler_by_chat_id(
         message.chat.id, c_reset_interests_of_doc_admin)
 
 
 def c_reset_interests_of_doc_admin(message):
-    if message.text.isdigit():
-        db.reset_interests_of_doc(int(message.text))
-        bot.send_message(
-            message.chat.id, 'Категория интереса у факта успешно удалена!')
+    if (message.text != '/break'):
+        if message.text.isdigit():
+            db.reset_interests_of_doc(int(message.text))
+            bot.send_message(
+                message.chat.id, 'Категория интереса у факта успешно удалена!')
+        else:
+            bot.send_message(message.chat.id, 'Произошла ошибка!')
     else:
-        bot.send_message(message.chat.id, 'Произошла ошибка!')
+        bot.send_message(message.chat.id, 'Действие успешно отменено!')
 
 
 def send_main_message(message):
@@ -366,8 +394,8 @@ def get_list_info(username):
                     username, unappreciated_id)
 
                 if similarity_interests != 0:
-                    similarity += similarity_interests / \
-                        db.get_count_interests_of_doc(unappreciated_id)
+                    similarity += (1 - math.log(similarity_interests /
+                                                db.get_count_interests_of_doc(unappreciated_id))) / 2
 
                 result.append((unappreciated_id, similarity,
                               db.is_already_shown(username, unappreciated_id)))
@@ -379,8 +407,8 @@ def get_list_info(username):
                 username, unappreciated_id)
 
             if similarity_interests != 0:
-                similarity += similarity_interests / \
-                    db.get_count_interests_of_doc(unappreciated_id)
+                similarity += (1 - math.log(similarity_interests /
+                                            db.get_count_interests_of_doc(unappreciated_id))) / 2
 
             result.append((unappreciated_id, similarity,
                           db.is_already_shown(username, unappreciated_id)))
